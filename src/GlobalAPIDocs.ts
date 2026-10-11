@@ -35,7 +35,7 @@ class GlobalAPIListProvider extends Effect.Service<GlobalAPIListProvider>()(
         for (const line of text.split("\n")) {
           if (line.match(/[{}]/)) continue // ignore lines with braces { }
           if (line.trim().length === 0) continue // ignore empty lines
-          const match = line.match(/"(\w+)"/)
+          const match = line.match(/"(\w.+)"/)
           if (match) {
             collectedGlobals.push(match[1])
           }
@@ -73,8 +73,8 @@ class GlobalAPISearchProvider extends Effect.Service<GlobalAPISearchProvider>()(
           limit: 100,
           key: "target"
         })
-        console.error("query:", query)
-        console.error("Fuzzy search results:", results)
+        //console.error("query:", query)
+        //console.error("Fuzzy search results:", results)
         return results.reduce((acc, res) => {
           acc.push(res.obj.key)
           return acc
@@ -155,7 +155,7 @@ class WarcraftWikiGGProvider extends Effect.Service<WarcraftWikiGGProvider>()("W
 
     const expandMediawikiTemplates = (pageContent: string) =>
       pipe(
-        Effect.log(`Expanding MediaWiki templates for ${pageContent}`),
+        Effect.log(`Expanding MediaWiki templates (${pageContent.length} chars)`),
         Effect.andThen(
           httpClient.post(`https://warcraft.wiki.gg/api.php`, {
             urlParams: {
@@ -261,7 +261,7 @@ class WarcraftWikiGGProvider extends Effect.Service<WarcraftWikiGGProvider>()("W
 // Resources
 const clientVersionParam = McpSchema.param("clientVersion", Schema.Literal(...SupportedClientVersions))
 const ApiListMcpResource = McpServer
-  .resource`resource://lua_global_apis/valid_api_names?clientVersion=${clientVersionParam}`({
+  .resource`resource://lua_global_apis/valid_api_names/${clientVersionParam}`({
     name: "Valid global API names by game version",
     mimeType: "application/json",
     description:
@@ -311,7 +311,7 @@ const ToolkitSchema = AiToolkit.make(
       .replace("{{flavors}}", SupportedClientVersions.join(", "))
       .replace("{{default}}", TOOL_DEFAULT_GAME_VERSION),
     parameters: {
-      clientVersion: ClientVersionParam.annotations({ default: TOOL_DEFAULT_GAME_VERSION })
+      clientVersion: Schema.UndefinedOr(ClientVersionParam).annotations({ default: TOOL_DEFAULT_GAME_VERSION })
     },
     success: Schema.Struct({
       valid: Schema.Array(Schema.String).annotations({
