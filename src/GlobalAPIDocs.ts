@@ -1,11 +1,11 @@
 import { AiTool, AiToolkit, McpSchema, McpServer } from "@effect/ai"
 import { HttpBody, HttpClient, HttpClientResponse } from "@effect/platform"
 import { NodeHttpClient } from "@effect/platform-node"
-import { Cache, Duration, Effect, Layer, pipe, Resource, Schedule, Schema } from "effect"
+import { Cache, Duration, Effect, Layer, pipe, Schedule, Schema } from "effect"
 import { isNotUndefined } from "effect/Predicate"
 import fuzzysort from "fuzzysort"
 import type { SupportedClientVersion } from "./GlobalStrings.js"
-import { ClientVersionParam, SupportedClientVersions } from "./GlobalStrings.js"
+import { ClientVersionParam, KethoBranch, SupportedClientVersions } from "./GlobalStrings.js"
 
 const TOOL_DEFAULT_GAME_VERSION: SupportedClientVersion = "mainline"
 
@@ -18,11 +18,11 @@ class GlobalAPIListProvider extends Effect.Service<GlobalAPIListProvider>()(
   {
     scoped: Effect.gen(function*() {
       const httpClient = (yield* HttpClient.HttpClient).pipe(
-        HttpClient.filterStatusOk,
-        HttpClient.retry(Schedule.spaced(Duration.seconds(3)))
+          HttpClient.filterStatusOk,
+          HttpClient.retry(Schedule.spaced(Duration.seconds(3)).pipe(Schedule.intersect(Schedule.recurs(3))))
       )
       const getGlobalAPIFileUrl = (version: SupportedClientVersion) =>
-        `https://raw.githubusercontent.com/Ketho/BlizzardInterfaceResources/${version}/Resources/GlobalAPI.lua`
+        `https://raw.githubusercontent.com/Ketho/BlizzardInterfaceResources/${KethoBranch[version]}/Resources/GlobalAPI.lua`
 
       const fetchAndParseApiGlobalsByGameVersion = Effect.fn(function*(version: SupportedClientVersion) {
         const text = yield* pipe(
@@ -43,21 +43,13 @@ class GlobalAPIListProvider extends Effect.Service<GlobalAPIListProvider>()(
         return collectedGlobals
       })
 
-      const cachedGlobalsByGameVersion = yield* Resource.auto(
-        Effect.gen(function*() {
-          const apiGlobals = {} as Record<SupportedClientVersion, Array<GlobalAPIName>>
-          for (const gameVersion of SupportedClientVersions) {
-            apiGlobals[gameVersion] = yield* fetchAndParseApiGlobalsByGameVersion(gameVersion)
-          }
-          return yield* Effect.succeed(apiGlobals)
-        }),
-        Schedule.spaced(Duration.hours(1))
-      )
+      const cachedGlobalsByGameVersion = yield* Cache.make({
+        capacity: SupportedClientVersions.length,
+        timeToLive: Duration.hours(1),
+        lookup: fetchAndParseApiGlobalsByGameVersion
+      })
       return {
-        get: (version: SupportedClientVersion = TOOL_DEFAULT_GAME_VERSION) =>
-          Resource.get(cachedGlobalsByGameVersion).pipe(
-            Effect.map((globals) => globals[version])
-          )
+        get: (version: SupportedClientVersion = TOOL_DEFAULT_GAME_VERSION) => cachedGlobalsByGameVersion.get(version)
       }
     }),
     dependencies: [NodeHttpClient.layerUndici]
