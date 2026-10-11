@@ -1,7 +1,7 @@
 import { AiTool, AiToolkit, McpServer } from "@effect/ai"
 import { HttpClient, HttpClientResponse } from "@effect/platform"
 import { NodeHttpClient } from "@effect/platform-node"
-import { Duration, Effect, Layer, pipe, Resource, Schedule, Schema } from "effect"
+import { Cache, Duration, Effect, Layer, pipe, Schedule, Schema } from "effect"
 import fuzzysort from "fuzzysort"
 
 const DEFAULT_SEARCH_THRESHOLD = 0.08
